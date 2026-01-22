@@ -1,5 +1,6 @@
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -12,6 +13,8 @@
 
 #include "elements/text_element.h"
 #include "elements/element_renderer.h"
+#include "elements/rich_text_element.h"
+#include "elements/rich_text_renderer.h"
 #include "renderer/scene_renderer.h"
 
 #include "image/png_writer.h"
@@ -35,22 +38,37 @@ struct Options
     int warmup = 30;
     bool save = true;
     std::string out_path = "out.png";
+    std::string chromium_path = "/usr/bin/chromium";
+    std::string rich_html_path;
+    int rich_width = 800;
+    int rich_height = 300;
 };
 
 static void printUsage(const char *prog)
 {
     std::cerr
         << "Usage: " << prog << " [face_index] [--mode=full|blit_only|text_only] [--iters=N] [--warmup=N] [--out=PATH] [--no-save]\n"
+        << "             [--rich-html=PATH] [--rich-width=N] [--rich-height=N] [--chromium=PATH]\n"
         << "Example:\n"
         << "  " << prog << " 0 --mode=full --iters=300\n"
         << "  " << prog << " 0 --mode=blit_only\n"
         << "  " << prog << " 0 --mode=text_only --no-save\n"
-        << "  " << prog << " 0 --out=out.png\n";
+        << "  " << prog << " 0 --out=out.png\n"
+        << "  " << prog << " 0 --rich-html=/path/to/rich.html --rich-width=900 --rich-height=360\n";
 }
 
 static bool startsWith(const std::string &s, const std::string &prefix)
 {
     return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
+}
+
+static std::string readFileToString(const std::string &path)
+{
+    std::ifstream in(path);
+    if (!in)
+        return {};
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return content;
 }
 
 static Options parseOptions(int argc, char **argv, int arg_start_index)
@@ -85,6 +103,22 @@ static Options parseOptions(int argc, char **argv, int arg_start_index)
         {
             opt.out_path = a.substr(std::string("--out=").size());
         }
+        else if (startsWith(a, "--rich-html="))
+        {
+            opt.rich_html_path = a.substr(std::string("--rich-html=").size());
+        }
+        else if (startsWith(a, "--rich-width="))
+        {
+            opt.rich_width = std::atoi(a.c_str() + std::string("--rich-width=").size());
+        }
+        else if (startsWith(a, "--rich-height="))
+        {
+            opt.rich_height = std::atoi(a.c_str() + std::string("--rich-height=").size());
+        }
+        else if (startsWith(a, "--chromium="))
+        {
+            opt.chromium_path = a.substr(std::string("--chromium=").size());
+        }
         else if (startsWith(a, "--warmup="))
         {
             opt.warmup = std::atoi(a.c_str() + std::string("--warmup=").size());
@@ -105,13 +139,17 @@ static Options parseOptions(int argc, char **argv, int arg_start_index)
         opt.iters = 1;
     if (opt.warmup < 0)
         opt.warmup = 0;
+    if (opt.rich_width <= 0)
+        opt.rich_width = 800;
+    if (opt.rich_height <= 0)
+        opt.rich_height = 300;
     return opt;
 }
 
 int main(int argc, char **argv)
 {
     // =========================
-    // 参数处理（字体路径必填）
+    // 参数处理（字体路径固定）
     // =========================
     if (argc < 1)
     {
@@ -166,6 +204,7 @@ int main(int argc, char **argv)
         // 构造 demo 元素
         // =========================
         std::vector<TextElement> elements;
+        std::vector<RichTextElement> rich_elements;
 
         {
             TextElement e;
@@ -193,10 +232,28 @@ int main(int argc, char **argv)
             elements.push_back(e);
         }
 
+        if (!opt.rich_html_path.empty())
+        {
+            const std::string html = readFileToString(opt.rich_html_path);
+            if (html.empty())
+            {
+                std::cerr << "Failed to read rich HTML: " << opt.rich_html_path << "\n";
+                return 1;
+            }
+
+            RichTextElement rich;
+            rich.html = html;
+            rich.position = {80, 320};
+            rich.width = opt.rich_width;
+            rich.height = opt.rich_height;
+            rich_elements.push_back(rich);
+        }
+
         // =========================
         // blit_only 模式：预渲染所有小图一次
         // =========================
         std::vector<PreparedBlitItem> prepared;
+        RichTextRenderer richTextRenderer(opt.chromium_path);
         if (opt.mode == BenchMode::BlitOnly)
         {
             prepared.reserve(elements.size());
@@ -209,6 +266,15 @@ int main(int argc, char **argv)
                 g_sink += static_cast<std::uint64_t>(item.surface.width() + item.surface.height());
                 prepared.push_back(std::move(item));
             }
+
+            for (const auto &e : rich_elements)
+            {
+                PreparedBlitItem item;
+                item.surface = richTextRenderer.renderRichTextElement(e);
+                item.position = e.position;
+                g_sink += static_cast<std::uint64_t>(item.surface.width() + item.surface.height());
+                prepared.push_back(std::move(item));
+            }
         }
 
         // =========================
@@ -218,7 +284,14 @@ int main(int argc, char **argv)
         {
             if (opt.mode == BenchMode::Full)
             {
-                scene.renderFrame(elements, elementRenderer);
+                if (rich_elements.empty())
+                {
+                    scene.renderFrame(elements, elementRenderer);
+                }
+                else
+                {
+                    scene.renderFrame(elements, rich_elements, elementRenderer, richTextRenderer);
+                }
             }
             else if (opt.mode == BenchMode::BlitOnly)
             {
@@ -230,6 +303,15 @@ int main(int argc, char **argv)
                 {
                     auto s = elementRenderer.renderTextElement(e);
                     // touch a byte to make it "used"
+                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
+                    if (s.width() > 0 && s.height() > 0)
+                    {
+                        g_sink += s.data()[0];
+                    }
+                }
+                for (const auto &e : rich_elements)
+                {
+                    auto s = richTextRenderer.renderRichTextElement(e);
                     g_sink += static_cast<std::uint64_t>(s.width() + s.height());
                     if (s.width() > 0 && s.height() > 0)
                     {
@@ -250,7 +332,14 @@ int main(int argc, char **argv)
 
             if (opt.mode == BenchMode::Full)
             {
-                scene.renderFrame(elements, elementRenderer);
+                if (rich_elements.empty())
+                {
+                    scene.renderFrame(elements, elementRenderer);
+                }
+                else
+                {
+                    scene.renderFrame(elements, rich_elements, elementRenderer, richTextRenderer);
+                }
             }
             else if (opt.mode == BenchMode::BlitOnly)
             {
@@ -261,6 +350,15 @@ int main(int argc, char **argv)
                 for (const auto &e : elements)
                 {
                     auto s = elementRenderer.renderTextElement(e);
+                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
+                    if (s.width() > 0 && s.height() > 0)
+                    {
+                        g_sink += s.data()[0];
+                    }
+                }
+                for (const auto &e : rich_elements)
+                {
+                    auto s = richTextRenderer.renderRichTextElement(e);
                     g_sink += static_cast<std::uint64_t>(s.width() + s.height());
                     if (s.width() > 0 && s.height() > 0)
                     {
