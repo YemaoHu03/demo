@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <unistd.h>
 
 #include "image/png_reader.h"
 
@@ -42,11 +43,22 @@ namespace demo
     RichTextRenderer::RichTextRenderer(std::string chromium_path, std::string work_dir)
         : chromium_path_(std::move(chromium_path)), work_dir_(std::move(work_dir))
     {
+        available_ = ::access(chromium_path_.c_str(), X_OK) == 0;
     }
 
     RgbaSurface RichTextRenderer::renderRichTextElement(const RichTextElement &element) const
     {
         RgbaSurface surface;
+        if (!available_)
+        {
+            if (!warned_missing_)
+            {
+                std::cerr << "Chromium not found at " << chromium_path_
+                          << ", skip rich text rendering.\n";
+                warned_missing_ = true;
+            }
+            return surface;
+        }
         if (element.width <= 0 || element.height <= 0 || element.html.empty())
             return surface;
 

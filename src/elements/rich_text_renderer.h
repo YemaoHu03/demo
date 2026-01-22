@@ -15,11 +15,15 @@ namespace demo
     public:
         explicit RichTextRenderer(std::string chromium_path, std::string work_dir = "/tmp");
 
+        bool available() const { return available_; }
+
         RgbaSurface renderRichTextElement(const RichTextElement &element) const;
 
     private:
         std::string chromium_path_;
         std::string work_dir_;
+        bool available_ = false;
+        mutable bool warned_missing_ = false;
     };
 
 } // namespace demo

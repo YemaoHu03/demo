@@ -245,6 +245,10 @@ int main(int argc, char **argv)
         // =========================
         std::vector<PreparedBlitItem> prepared;
         RichTextRenderer richTextRenderer(opt.chromium_path);
+        if (!richTextRenderer.available())
+        {
+            rich_elements.clear();
+        }
         if (opt.mode == BenchMode::BlitOnly)
         {
             prepared.reserve(elements.size());
