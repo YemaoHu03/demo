@@ -71,9 +71,11 @@ namespace demo
             out << buildHtmlDocument(element);
         }
 
+        const bool is_root = ::geteuid() == 0;
         const std::string cmd =
             escapeForShell(chromium_path_) +
-            " --headless --disable-gpu --hide-scrollbars --default-background-color=00000000"
+            " --headless --disable-gpu --hide-scrollbars --default-background-color=00000000" +
+            (is_root ? " --no-sandbox --disable-setuid-sandbox" : "") +
             " --window-size=" + std::to_string(element.width) + "," + std::to_string(element.height) +
             " --screenshot=" + escapeForShell(png_path) + " " + escapeForShell("file://" + html_path);
 

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 #include "text/font_library.h"
 #include "text/font_face.h"
@@ -88,6 +89,21 @@ static std::string decodeHtmlEntities(const std::string &input)
         }
     }
     return out;
+}
+
+static std::string pickChromiumPath()
+{
+    const char *candidates[] = {
+        "/usr/bin/chromium",
+        "/snap/bin/chromium",
+        "/usr/bin/chromium-browser",
+    };
+    for (const char *path : candidates)
+    {
+        if (::access(path, X_OK) == 0)
+            return path;
+    }
+    return "/usr/bin/chromium";
 }
 
 static Options parseOptions(int argc, char **argv, int arg_start_index)
@@ -178,6 +194,7 @@ int main(int argc, char **argv)
     }
 
     Options opt = parseOptions(argc, argv, opt_start);
+    opt.chromium_path = pickChromiumPath();
 
     try
     {
