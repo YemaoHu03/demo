@@ -9,7 +9,6 @@ find_package(Freetype REQUIRED)
 add_library(demo_core
     src/image/rgba_surface.cpp
     src/image/blit.cpp
-    src/image/ppm_writer.cpp
     src/image/png_writer.cpp
 
     src/text/font_library.cpp

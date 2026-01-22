@@ -15,7 +15,6 @@
 #include "renderer/scene_renderer.h"
 
 #include "image/png_writer.h"
-#include "image/ppm_writer.h"
 
 using namespace demo;
 
@@ -29,33 +28,24 @@ enum class BenchMode
     TextOnly  // only render small surfaces, no blit
 };
 
-enum class OutputFormat
-{
-    Png,
-    Ppm
-};
-
 struct Options
 {
     BenchMode mode = BenchMode::Full;
     int iters = 300;
     int warmup = 30;
     bool save = true;
-    OutputFormat format = OutputFormat::Ppm;
-    std::string out_path = "out.ppm";
-    bool out_path_set = false;
-    bool format_set = false;
+    std::string out_path = "out.png";
 };
 
 static void printUsage(const char *prog)
 {
     std::cerr
-        << "Usage: " << prog << " /path/to/font.ttf_or_ttc [face_index] [--mode=full|blit_only|text_only] [--iters=N] [--warmup=N] [--output=png|ppm] [--out=PATH] [--no-save]\n"
+        << "Usage: " << prog << " [face_index] [--mode=full|blit_only|text_only] [--iters=N] [--warmup=N] [--out=PATH] [--no-save]\n"
         << "Example:\n"
-        << "  " << prog << " /root/.local/share/fonts/simsun.ttc 0 --mode=full --iters=300\n"
-        << "  " << prog << " /root/.local/share/fonts/simsun.ttc 0 --mode=blit_only --output=png\n"
-        << "  " << prog << " /root/.local/share/fonts/simsun.ttc 0 --mode=text_only --no-save\n"
-        << "  " << prog << " /root/.local/share/fonts/simsun.ttc 0 --output=ppm --out=out.ppm\n";
+        << "  " << prog << " 0 --mode=full --iters=300\n"
+        << "  " << prog << " 0 --mode=blit_only\n"
+        << "  " << prog << " 0 --mode=text_only --no-save\n"
+        << "  " << prog << " 0 --out=out.png\n";
 }
 
 static bool startsWith(const std::string &s, const std::string &prefix)
@@ -91,49 +81,9 @@ static Options parseOptions(int argc, char **argv, int arg_start_index)
         {
             opt.iters = std::atoi(a.c_str() + std::string("--iters=").size());
         }
-        else if (startsWith(a, "--output="))
-        {
-            std::string v = a.substr(std::string("--output=").size());
-            if (v == "png")
-            {
-                opt.format = OutputFormat::Png;
-                opt.format_set = true;
-                if (!opt.out_path_set)
-                    opt.out_path = "out.png";
-            }
-            else if (v == "ppm")
-            {
-                opt.format = OutputFormat::Ppm;
-                opt.format_set = true;
-                if (!opt.out_path_set)
-                    opt.out_path = "out.ppm";
-            }
-            else
-            {
-                std::cerr << "Unknown output format: " << v << "\n";
-                printUsage(argv[0]);
-                std::exit(1);
-            }
-        }
         else if (startsWith(a, "--out="))
         {
             opt.out_path = a.substr(std::string("--out=").size());
-            opt.out_path_set = true;
-            if (!opt.format_set)
-            {
-                const std::string png_suffix = ".png";
-                const std::string ppm_suffix = ".ppm";
-                if (opt.out_path.size() >= png_suffix.size() &&
-                    opt.out_path.compare(opt.out_path.size() - png_suffix.size(), png_suffix.size(), png_suffix) == 0)
-                {
-                    opt.format = OutputFormat::Png;
-                }
-                else if (opt.out_path.size() >= ppm_suffix.size() &&
-                         opt.out_path.compare(opt.out_path.size() - ppm_suffix.size(), ppm_suffix.size(), ppm_suffix) == 0)
-                {
-                    opt.format = OutputFormat::Ppm;
-                }
-            }
         }
         else if (startsWith(a, "--warmup="))
         {
@@ -163,30 +113,30 @@ int main(int argc, char **argv)
     // =========================
     // 参数处理（字体路径必填）
     // =========================
-    if (argc < 2)
+    if (argc < 1)
     {
         printUsage(argv[0]);
         return 1;
     }
 
-    std::string font_path = argv[1];
+    std::string font_path = "/root/.local/share/fonts/simsun.ttc";
 
     // face_index：可选，如果 argv[2] 不是数字则默认 0，并把 argv[2] 当作 options 开始
     int face_index = 0;
-    int opt_start = 2;
+    int opt_start = 1;
 
-    if (argc >= 3)
+    if (argc >= 2)
     {
         // 简单判断 argv[2] 是否为纯数字（允许 0/1/2...）
-        std::string s = argv[2];
+        std::string s = argv[1];
         bool is_num = !s.empty();
         for (char c : s)
             is_num = is_num && (c >= '0' && c <= '9');
 
         if (is_num)
         {
-            face_index = std::atoi(argv[2]);
-            opt_start = 3;
+            face_index = std::atoi(argv[1]);
+            opt_start = 2;
         }
     }
 
@@ -340,18 +290,10 @@ int main(int argc, char **argv)
         // =========================
         if (opt.save && (opt.mode == BenchMode::Full || opt.mode == BenchMode::BlitOnly))
         {
-            if (opt.format == OutputFormat::Png)
-            {
-                if (PngWriter::save(opt.out_path, scene.canvas()))
-                    std::cout << "Saved " << opt.out_path << "\n";
-                else
-                    std::cout << "Failed to save " << opt.out_path << "\n";
-            }
-            else
-            {
-                PpmWriter::saveP6(opt.out_path, scene.canvas());
+            if (PngWriter::save(opt.out_path, scene.canvas()))
                 std::cout << "Saved " << opt.out_path << "\n";
-            }
+            else
+                std::cout << "Failed to save " << opt.out_path << "\n";
         }
 
         // 防止 sink 被完全丢掉（调试用）
