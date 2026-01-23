@@ -94,6 +94,7 @@ static std::string decodeHtmlEntities(const std::string &input)
 static std::string pickChromiumPath()
 {
     const char *candidates[] = {
+        "/snap/bin/chromium",
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
         "/usr/local/bin/chromium",
