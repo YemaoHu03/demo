@@ -1,4 +1,3 @@
-#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -21,24 +20,8 @@
 
 using namespace demo;
 
-// 防止 text_only 模式下编译器把“渲染但不用结果”的逻辑优化掉
-static volatile std::uint64_t g_sink = 0;
-
-enum class BenchMode
-{
-    Full,     // render small + blit
-    BlitOnly, // pre-render small once; per frame only blit
-    TextOnly, // only render small surfaces, no blit
-    KernelOnly, // alias of TextOnly, explicitly used for kernel generation speed
-    RichTextOnly // only render rich text elements, no blit
-};
-
 struct Options
 {
-    BenchMode mode = BenchMode::Full;
-    int iters = 300;
-    int warmup = 30;
-    bool save = true;
     std::string out_path = "out.png";
     std::string chromium_path = "/usr/bin/chromium";
 };
@@ -46,11 +29,9 @@ struct Options
 static void printUsage(const char *prog)
 {
     std::cerr
-        << "Usage: " << prog << " [face_index] [--mode=full|blit_only|text_only|kernel_only|rich_text_only] [--iters=N] [--warmup=N] [--out=PATH] [--no-save]\n"
+        << "Usage: " << prog << " [face_index] [--out=PATH]\n"
         << "Example:\n"
-        << "  " << prog << " 0 --mode=full --iters=300\n"
-        << "  " << prog << " 0 --mode=blit_only\n"
-        << "  " << prog << " 0 --mode=text_only --no-save\n"
+        << "  " << prog << " 0\n"
         << "  " << prog << " 0 --out=out.png\n";
 }
 
@@ -130,41 +111,9 @@ static Options parseOptions(int argc, char **argv, int arg_start_index)
     {
         std::string a = argv[i];
 
-        if (startsWith(a, "--mode="))
-        {
-            std::string v = a.substr(std::string("--mode=").size());
-            if (v == "full")
-                opt.mode = BenchMode::Full;
-            else if (v == "blit_only")
-                opt.mode = BenchMode::BlitOnly;
-            else if (v == "text_only")
-                opt.mode = BenchMode::TextOnly;
-            else if (v == "kernel_only")
-                opt.mode = BenchMode::KernelOnly;
-            else if (v == "rich_text_only")
-                opt.mode = BenchMode::RichTextOnly;
-            else
-            {
-                std::cerr << "Unknown mode: " << v << "\n";
-                printUsage(argv[0]);
-                std::exit(1);
-            }
-        }
-        else if (startsWith(a, "--iters="))
-        {
-            opt.iters = std::atoi(a.c_str() + std::string("--iters=").size());
-        }
-        else if (startsWith(a, "--out="))
+        if (startsWith(a, "--out="))
         {
             opt.out_path = a.substr(std::string("--out=").size());
-        }
-        else if (startsWith(a, "--warmup="))
-        {
-            opt.warmup = std::atoi(a.c_str() + std::string("--warmup=").size());
-        }
-        else if (a == "--no-save")
-        {
-            opt.save = false;
         }
         else
         {
@@ -174,10 +123,6 @@ static Options parseOptions(int argc, char **argv, int arg_start_index)
         }
     }
 
-    if (opt.iters <= 0)
-        opt.iters = 1;
-    if (opt.warmup < 0)
-        opt.warmup = 0;
     return opt;
 }
 
@@ -277,185 +222,24 @@ int main(int argc, char **argv)
         rich.height = 360;
         rich_elements.push_back(rich);
 
-        // =========================
-        // blit_only 模式：预渲染所有小图一次
-        // =========================
-        std::vector<PreparedBlitItem> prepared;
         RichTextRenderer richTextRenderer(opt.chromium_path);
         if (!richTextRenderer.available())
         {
             rich_elements.clear();
         }
-        if (opt.mode == BenchMode::BlitOnly)
+        if (rich_elements.empty())
         {
-            prepared.reserve(elements.size());
-            for (const auto &e : elements)
-            {
-                PreparedBlitItem item;
-                item.surface = elementRenderer.renderTextElement(e);
-                item.position = e.position;
-                // 为避免极端情况下编译器优化/或方便调试，写一点 sink
-                g_sink += static_cast<std::uint64_t>(item.surface.width() + item.surface.height());
-                prepared.push_back(std::move(item));
-            }
-
-            for (const auto &e : rich_elements)
-            {
-                PreparedBlitItem item;
-                item.surface = richTextRenderer.renderRichTextElement(e);
-                item.position = e.position;
-                g_sink += static_cast<std::uint64_t>(item.surface.width() + item.surface.height());
-                prepared.push_back(std::move(item));
-            }
+            scene.renderFrame(elements, elementRenderer);
+        }
+        else
+        {
+            scene.renderFrame(elements, rich_elements, elementRenderer, richTextRenderer);
         }
 
-        // =========================
-        // warm-up
-        // =========================
-        for (int i = 0; i < opt.warmup; ++i)
-        {
-            if (opt.mode == BenchMode::Full)
-            {
-                if (rich_elements.empty())
-                {
-                    scene.renderFrame(elements, elementRenderer);
-                }
-                else
-                {
-                    scene.renderFrame(elements, rich_elements, elementRenderer, richTextRenderer);
-                }
-            }
-            else if (opt.mode == BenchMode::BlitOnly)
-            {
-                scene.renderFramePrepared(prepared, clearBlack);
-            }
-            else if (opt.mode == BenchMode::TextOnly || opt.mode == BenchMode::KernelOnly)
-            { // TextOnly
-                for (const auto &e : elements)
-                {
-                    auto s = elementRenderer.renderTextElement(e);
-                    // touch a byte to make it "used"
-                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
-                    if (s.width() > 0 && s.height() > 0)
-                    {
-                        g_sink += s.data()[0];
-                    }
-                }
-                for (const auto &e : rich_elements)
-                {
-                    auto s = richTextRenderer.renderRichTextElement(e);
-                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
-                    if (s.width() > 0 && s.height() > 0)
-                    {
-                        g_sink += s.data()[0];
-                    }
-                }
-            }
-            else
-            { // RichTextOnly
-                for (const auto &e : rich_elements)
-                {
-                    auto s = richTextRenderer.renderRichTextElement(e);
-                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
-                    if (s.width() > 0 && s.height() > 0)
-                    {
-                        g_sink += s.data()[0];
-                    }
-                }
-            }
-        }
-
-        // =========================
-        // benchmark
-        // =========================
-        double total_ms = 0.0;
-
-        for (int i = 0; i < opt.iters; ++i)
-        {
-            auto t0 = std::chrono::steady_clock::now();
-
-            if (opt.mode == BenchMode::Full)
-            {
-                if (rich_elements.empty())
-                {
-                    scene.renderFrame(elements, elementRenderer);
-                }
-                else
-                {
-                    scene.renderFrame(elements, rich_elements, elementRenderer, richTextRenderer);
-                }
-            }
-            else if (opt.mode == BenchMode::BlitOnly)
-            {
-                scene.renderFramePrepared(prepared, clearBlack);
-            }
-            else if (opt.mode == BenchMode::TextOnly || opt.mode == BenchMode::KernelOnly)
-            { // TextOnly
-                for (const auto &e : elements)
-                {
-                    auto s = elementRenderer.renderTextElement(e);
-                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
-                    if (s.width() > 0 && s.height() > 0)
-                    {
-                        g_sink += s.data()[0];
-                    }
-                }
-                for (const auto &e : rich_elements)
-                {
-                    auto s = richTextRenderer.renderRichTextElement(e);
-                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
-                    if (s.width() > 0 && s.height() > 0)
-                    {
-                        g_sink += s.data()[0];
-                    }
-                }
-            }
-            else
-            { // RichTextOnly
-                for (const auto &e : rich_elements)
-                {
-                    auto s = richTextRenderer.renderRichTextElement(e);
-                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
-                    if (s.width() > 0 && s.height() > 0)
-                    {
-                        g_sink += s.data()[0];
-                    }
-                }
-            }
-
-            auto t1 = std::chrono::steady_clock::now();
-            total_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
-        }
-
-        const double avg_ms = total_ms / opt.iters;
-
-        // 输出模式信息
-        const char *mode_str =
-            (opt.mode == BenchMode::Full) ? "full"
-            : (opt.mode == BenchMode::BlitOnly) ? "blit_only"
-            : (opt.mode == BenchMode::KernelOnly) ? "kernel_only"
-            : (opt.mode == BenchMode::RichTextOnly) ? "rich_text_only"
-                                                    : "text_only";
-
-        std::cout << "Mode: " << mode_str
-                  << ", iters=" << opt.iters
-                  << ", warmup=" << opt.warmup
-                  << ", Avg frame: " << avg_ms << " ms\n";
-
-        // =========================
-        // 输出图像（仅 full / blit_only 有大图结果）
-        // =========================
-        if (opt.save && (opt.mode == BenchMode::Full || opt.mode == BenchMode::BlitOnly))
-        {
-            if (PngWriter::save(opt.out_path, scene.canvas()))
-                std::cout << "Saved " << opt.out_path << "\n";
-            else
-                std::cout << "Failed to save " << opt.out_path << "\n";
-        }
-
-        // 防止 sink 被完全丢掉（调试用）
-        if (g_sink == 0x12345678)
-            std::cout << "sink=" << g_sink << "\n";
+        if (PngWriter::save(opt.out_path, scene.canvas()))
+            std::cout << "Saved " << opt.out_path << "\n";
+        else
+            std::cout << "Failed to save " << opt.out_path << "\n";
 
         return 0;
     }
