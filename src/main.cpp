@@ -29,7 +29,8 @@ enum class BenchMode
     Full,     // render small + blit
     BlitOnly, // pre-render small once; per frame only blit
     TextOnly, // only render small surfaces, no blit
-    KernelOnly // alias of TextOnly, explicitly used for kernel generation speed
+    KernelOnly, // alias of TextOnly, explicitly used for kernel generation speed
+    RichTextOnly // only render rich text elements, no blit
 };
 
 struct Options
@@ -45,7 +46,7 @@ struct Options
 static void printUsage(const char *prog)
 {
     std::cerr
-        << "Usage: " << prog << " [face_index] [--mode=full|blit_only|text_only|kernel_only] [--iters=N] [--warmup=N] [--out=PATH] [--no-save]\n"
+        << "Usage: " << prog << " [face_index] [--mode=full|blit_only|text_only|kernel_only|rich_text_only] [--iters=N] [--warmup=N] [--out=PATH] [--no-save]\n"
         << "Example:\n"
         << "  " << prog << " 0 --mode=full --iters=300\n"
         << "  " << prog << " 0 --mode=blit_only\n"
@@ -127,6 +128,8 @@ static Options parseOptions(int argc, char **argv, int arg_start_index)
                 opt.mode = BenchMode::TextOnly;
             else if (v == "kernel_only")
                 opt.mode = BenchMode::KernelOnly;
+            else if (v == "rich_text_only")
+                opt.mode = BenchMode::RichTextOnly;
             else
             {
                 std::cerr << "Unknown mode: " << v << "\n";
@@ -335,6 +338,18 @@ int main(int argc, char **argv)
                     }
                 }
             }
+            else
+            { // RichTextOnly
+                for (const auto &e : rich_elements)
+                {
+                    auto s = richTextRenderer.renderRichTextElement(e);
+                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
+                    if (s.width() > 0 && s.height() > 0)
+                    {
+                        g_sink += s.data()[0];
+                    }
+                }
+            }
         }
 
         // =========================
@@ -382,6 +397,18 @@ int main(int argc, char **argv)
                     }
                 }
             }
+            else
+            { // RichTextOnly
+                for (const auto &e : rich_elements)
+                {
+                    auto s = richTextRenderer.renderRichTextElement(e);
+                    g_sink += static_cast<std::uint64_t>(s.width() + s.height());
+                    if (s.width() > 0 && s.height() > 0)
+                    {
+                        g_sink += s.data()[0];
+                    }
+                }
+            }
 
             auto t1 = std::chrono::steady_clock::now();
             total_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -394,7 +421,8 @@ int main(int argc, char **argv)
             (opt.mode == BenchMode::Full) ? "full"
             : (opt.mode == BenchMode::BlitOnly) ? "blit_only"
             : (opt.mode == BenchMode::KernelOnly) ? "kernel_only"
-                                                  : "text_only";
+            : (opt.mode == BenchMode::RichTextOnly) ? "rich_text_only"
+                                                    : "text_only";
 
         std::cout << "Mode: " << mode_str
                   << ", iters=" << opt.iters
