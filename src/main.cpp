@@ -59,7 +59,7 @@ static bool startsWith(const std::string &s, const std::string &prefix)
     return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
 }
 
-static std::string decodeHtmlEntities(const std::string &input)
+static std::string decodeHtmlEntitiesOnce(const std::string &input)
 {
     std::string out;
     out.reserve(input.size());
@@ -91,6 +91,19 @@ static std::string decodeHtmlEntities(const std::string &input)
         }
     }
     return out;
+}
+
+static std::string decodeHtmlEntities(const std::string &input)
+{
+    std::string current = input;
+    for (int i = 0; i < 4; ++i)
+    {
+        std::string next = decodeHtmlEntitiesOnce(current);
+        if (next == current)
+            break;
+        current = std::move(next);
+    }
+    return current;
 }
 
 static std::string pickChromiumPath()
