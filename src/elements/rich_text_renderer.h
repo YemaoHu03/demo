@@ -1,4 +1,5 @@
 #pragma once
+#include <unordered_map>
 #include <string>
 
 #include "elements/rich_text_element.h"
@@ -24,6 +25,7 @@ namespace demo
         std::string work_dir_;
         bool available_ = false;
         mutable bool warned_missing_ = false;
+        mutable std::unordered_map<std::string, RgbaSurface> cache_;
     };
 
 } // namespace demo

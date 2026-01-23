@@ -39,6 +39,13 @@ namespace demo
                  << "</div></body></html>";
             return html.str();
         }
+
+        std::string buildCacheKey(const RichTextElement &element)
+        {
+            std::ostringstream key;
+            key << element.width << "x" << element.height << ":" << element.html;
+            return key.str();
+        }
     } // namespace
 
     RichTextRenderer::RichTextRenderer(std::string chromium_path, std::string work_dir)
@@ -62,6 +69,11 @@ namespace demo
         }
         if (element.width <= 0 || element.height <= 0 || element.html.empty())
             return surface;
+
+        const std::string cache_key = buildCacheKey(element);
+        auto found = cache_.find(cache_key);
+        if (found != cache_.end())
+            return found->second;
 
         const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
         const std::string html_path = work_dir_ + "/rich_text_" + std::to_string(stamp) + ".html";
@@ -100,6 +112,7 @@ namespace demo
         if (!PngReader::load(png_path, surface))
             return RgbaSurface();
 
+        cache_.emplace(cache_key, surface);
         return surface;
     }
 
