@@ -13,7 +13,7 @@ namespace demo
     class RichTextRenderer
     {
     public:
-        explicit RichTextRenderer(std::string chromium_path, std::string work_dir = "/tmp");
+        explicit RichTextRenderer(std::string chromium_path, std::string work_dir = "/var/tmp");
 
         bool available() const { return available_; }
 

@@ -86,6 +86,17 @@ namespace demo
         if (rc != 0)
             return surface;
 
+        if (::access(png_path.c_str(), R_OK) != 0)
+        {
+            if (!warned_missing_)
+            {
+                std::cerr << "Chromium output not found at " << png_path
+                          << ", check snap confinement or work dir.\n";
+                warned_missing_ = true;
+            }
+            return surface;
+        }
+
         if (!PngReader::load(png_path, surface))
             return RgbaSurface();
 
