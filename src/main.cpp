@@ -95,8 +95,8 @@ static std::string pickChromiumPath()
 {
     const char *candidates[] = {
         "/usr/bin/chromium",
-        "/snap/bin/chromium",
         "/usr/bin/chromium-browser",
+        "/usr/local/bin/chromium",
     };
     for (const char *path : candidates)
     {
