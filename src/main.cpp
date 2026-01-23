@@ -28,7 +28,8 @@ enum class BenchMode
 {
     Full,     // render small + blit
     BlitOnly, // pre-render small once; per frame only blit
-    TextOnly  // only render small surfaces, no blit
+    TextOnly, // only render small surfaces, no blit
+    KernelOnly // alias of TextOnly, explicitly used for kernel generation speed
 };
 
 struct Options
@@ -44,7 +45,7 @@ struct Options
 static void printUsage(const char *prog)
 {
     std::cerr
-        << "Usage: " << prog << " [face_index] [--mode=full|blit_only|text_only] [--iters=N] [--warmup=N] [--out=PATH] [--no-save]\n"
+        << "Usage: " << prog << " [face_index] [--mode=full|blit_only|text_only|kernel_only] [--iters=N] [--warmup=N] [--out=PATH] [--no-save]\n"
         << "Example:\n"
         << "  " << prog << " 0 --mode=full --iters=300\n"
         << "  " << prog << " 0 --mode=blit_only\n"
@@ -124,6 +125,8 @@ static Options parseOptions(int argc, char **argv, int arg_start_index)
                 opt.mode = BenchMode::BlitOnly;
             else if (v == "text_only")
                 opt.mode = BenchMode::TextOnly;
+            else if (v == "kernel_only")
+                opt.mode = BenchMode::KernelOnly;
             else
             {
                 std::cerr << "Unknown mode: " << v << "\n";
@@ -310,7 +313,7 @@ int main(int argc, char **argv)
             {
                 scene.renderFramePrepared(prepared, clearBlack);
             }
-            else
+            else if (opt.mode == BenchMode::TextOnly || opt.mode == BenchMode::KernelOnly)
             { // TextOnly
                 for (const auto &e : elements)
                 {
@@ -358,7 +361,7 @@ int main(int argc, char **argv)
             {
                 scene.renderFramePrepared(prepared, clearBlack);
             }
-            else
+            else if (opt.mode == BenchMode::TextOnly || opt.mode == BenchMode::KernelOnly)
             { // TextOnly
                 for (const auto &e : elements)
                 {
@@ -388,8 +391,10 @@ int main(int argc, char **argv)
 
         // 输出模式信息
         const char *mode_str =
-            (opt.mode == BenchMode::Full) ? "full" : (opt.mode == BenchMode::BlitOnly) ? "blit_only"
-                                                                                       : "text_only";
+            (opt.mode == BenchMode::Full) ? "full"
+            : (opt.mode == BenchMode::BlitOnly) ? "blit_only"
+            : (opt.mode == BenchMode::KernelOnly) ? "kernel_only"
+                                                  : "text_only";
 
         std::cout << "Mode: " << mode_str
                   << ", iters=" << opt.iters
