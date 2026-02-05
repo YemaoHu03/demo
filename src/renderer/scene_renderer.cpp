@@ -20,6 +20,26 @@ namespace demo
         }
     }
 
+    void SceneRenderer::renderFrame(const std::vector<TextElement> &elements,
+                                    const std::vector<RichTextElement> &rich_elements,
+                                    ElementRenderer &elementRenderer,
+                                    RichTextRenderer &richTextRenderer)
+    {
+        canvas_.clear(Color{0, 0, 0, 255});
+
+        for (const auto &e : elements)
+        {
+            RgbaSurface small = elementRenderer.renderTextElement(e);
+            Blit::alphaBlend(canvas_, small, e.position.x, e.position.y);
+        }
+
+        for (const auto &e : rich_elements)
+        {
+            RgbaSurface small = richTextRenderer.renderRichTextElement(e);
+            Blit::alphaBlend(canvas_, small, e.position.x, e.position.y);
+        }
+    }
+
     void SceneRenderer::renderFramePrepared(const std::vector<PreparedBlitItem> &items, Color clear_color)
     {
         canvas_.clear(clear_color);

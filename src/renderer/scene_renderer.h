@@ -6,6 +6,8 @@
 #include "image/rgba_surface.h"
 #include "elements/text_element.h"
 #include "elements/element_renderer.h"
+#include "elements/rich_text_element.h"
+#include "elements/rich_text_renderer.h"
 
 namespace demo
 {
@@ -42,6 +44,14 @@ namespace demo
          * @brief 渲染一帧（输出写入内部 canvas）。
          */
         void renderFrame(const std::vector<TextElement> &elements, ElementRenderer &elementRenderer);
+
+        /**
+         * @brief 渲染一帧（包含富文本元素）。
+         */
+        void renderFrame(const std::vector<TextElement> &elements,
+                         const std::vector<RichTextElement> &rich_elements,
+                         ElementRenderer &elementRenderer,
+                         RichTextRenderer &richTextRenderer);
 
         /**
          * @brief 仅贴图模式：输入预渲染的小图列表，每帧只清屏 + 贴图。

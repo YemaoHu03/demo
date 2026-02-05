@@ -5,11 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Freetype REQUIRED)
+find_package(PNG REQUIRED)
 
 add_library(demo_core
     src/image/rgba_surface.cpp
     src/image/blit.cpp
-    src/image/ppm_writer.cpp
+    src/image/png_writer.cpp
+    src/image/png_reader.cpp
 
     src/text/font_library.cpp
     src/text/font_face.cpp
@@ -18,16 +20,19 @@ add_library(demo_core
     src/text/text_rasterizer.cpp
 
     src/elements/element_renderer.cpp
+    src/elements/rich_text_renderer.cpp
     src/renderer/scene_renderer.cpp
 )
 
 target_include_directories(demo_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${FREETYPE_INCLUDE_DIRS}
+    ${PNG_INCLUDE_DIRS}
 )
 
 target_link_libraries(demo_core PUBLIC
     ${FREETYPE_LIBRARIES}
+    ${PNG_LIBRARIES}
 )
 
 add_executable(demo src/main.cpp)
